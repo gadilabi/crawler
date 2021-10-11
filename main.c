@@ -1,7 +1,12 @@
+/* library defines */
 #define PCRE2_CODE_UNIT_WIDTH 8
 #define _BSD_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #define _GNU_SOURCE
+
+/* my defines */
+#define MAX_LINK_LENGTH 100
+
 #include <stdio.h>
 #include <curl/curl.h>
 #include <unistd.h>
@@ -11,10 +16,11 @@
 #include <wait.h>
 #include <fcntl.h>
 #include <pcre2posix.h>
-#include "myString.h"
-#include "myArray.h"
+#include "linked_list.h"
+#include "queue.h"
 
-char * links[50];
+Queue * links; 
+//char * links[50];
 
 char * findLinks(char * data, size_t size){
 
@@ -67,7 +73,7 @@ char * findLinks(char * data, size_t size){
 		char * link = malloc(length+1);
 		memcpy(link, &data[start], length);
 		link[length] = '\0';
-		links[lcounter] = link;
+		enq(links, (void *) link);
 		lcounter++;
 		totalMatches++;
 
@@ -76,7 +82,6 @@ char * findLinks(char * data, size_t size){
 
 	}
 
-	links[totalMatches] = NULL;
 }
 
 size_t cb(char * buffer, size_t itemSize, size_t nitems, void * fp){
@@ -93,12 +98,16 @@ size_t cb(char * buffer, size_t itemSize, size_t nitems, void * fp){
 char * copyFile(char * file){
 	// File to write output to
 	FILE * fp = fopen("output.txt", "a");
+}
 
-
-
+void printcb(void * p){
+	printf("%s\n", (char *)p);
 }
 
 int main(int argc, char * argv[]){
+
+	// Initialize the links list
+	links = initQueue(MAX_LINK_LENGTH);
 
 	// Starting point for crawler
 	char * seed;
@@ -111,11 +120,9 @@ int main(int argc, char * argv[]){
 	findLinks(str, strSize);
 
 	int counter = 0;
-	while(links[counter]!=NULL){
-		printf("%s\n", links[counter]);
-		counter++;
-
-	}
+	char * val;
+	printQueue(links, printcb);
+	return 0;
 
 	// Copy file to buffer
 	//char * buffer = copyFile("output.txt");

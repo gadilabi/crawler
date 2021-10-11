@@ -1,14 +1,14 @@
-main.exe: main.o myArray.o myString.o
-	gcc -g --std=c99 main.o myArray.o myString.o -lcurl -lpcre2-posix -o main.exe -Wl,-rpath,/usr/local/lib
+main.exe: main.o queue.o linked_list.o  
+	gcc -g --std=c99 main.o queue.o linked_list.o -lcurl -lpcre2-posix -o main.exe -Wl,-rpath,/usr/local/lib
 
 main.o: main.c
 	gcc -g -c --std=c99 main.c -o main.o
 
-myArray.o: myArray.c
-	gcc -g -c --std=c99 myArray.c -o myArray.o
+linked_list.o: linked_list.c
+	gcc -g -c --std=c99 linked_list.c -o linked_list.o
 
-myString.o: myString.c
-	gcc -g -c --std=c99 myString.c -o myString.o
+queue.o: queue.c
+	gcc -g -c --std=c99 queue.c -o queue.o
 
 clean:
 	rm *.o *.exe
