@@ -7,6 +7,7 @@
 /* my defines */
 #define MAX_LINK_LENGTH 100
 
+// Standard libraries includes
 #include <stdio.h>
 #include <curl/curl.h>
 #include <unistd.h>
@@ -15,12 +16,40 @@
 #include <errno.h>
 #include <wait.h>
 #include <fcntl.h>
+
+// perl regex library
 #include <pcre2posix.h>
+
+// my includes
 #include "linked_list.h"
 #include "queue.h"
 
+// Data structures
+typedef struct response{
+	char * buffer;
+	int offset;
+	int size;
+} Response;
+
+// Function declarations
+void die(char * msg);
+
+// Generic queue to hold link found
 Queue * links; 
-//char * links[50];
+
+// max response length
+int MAX_RESPONSE_LENGTH = 4096;
+
+Response * initResponse(){
+	Response * res = malloc(sizeof(Response));
+	res->buffer = malloc(MAX_RESPONSE_LENGTH);
+	res->offset = 0;
+	res->size = MAX_RESPONSE_LENGTH;
+
+	return res;
+
+}
+
 
 char * findLinks(char * data, size_t size){
 
@@ -84,13 +113,23 @@ char * findLinks(char * data, size_t size){
 
 }
 
-size_t cb(char * buffer, size_t itemSize, size_t nitems, void * fp){
+size_t cb(char * buffer, size_t itemSize, size_t nitems, void * res){
 
-	static int counter = 0;
 	size_t bytes = itemSize * nitems;
-	//printf("chunk %d size: %zu\n", counter, bytes);
-	findLinks(buffer, bytes);
-	//fwrite(buffer, bytes, 1, (FILE *)fp);
+	
+	// Check response size is within legit range otherwise realloc
+	if(bytes > ((Response *) res)->size - ((Response *) res)->offset){
+		Response * s = realloc(res, 2 * ((Response * ) res)->size);
+
+		if(s==NULL){
+			die("failed to allocate enough space for response");
+		}
+
+		res = s;
+	}
+
+	int offset = ((Response *) res)->offset;
+	memcpy(&((Response *) res)->buffer[offset], buffer, bytes);
 	return bytes;
 
 }
@@ -106,69 +145,47 @@ void printcb(void * p){
 
 int main(int argc, char * argv[]){
 
+	// Buffer to store response
+	Response * res = initResponse();
+
+	// Offset in res
+	int resOffset = 0;
+
+	// Open file to write ouput
+	FILE * fp = fopen("output.txt", "w");
+
 	// Initialize the links list
 	links = initQueue(MAX_LINK_LENGTH);
 
 	// Starting point for crawler
 	char * seed;
 
-	// File to be read
-	FILE * fp = fopen("output.txt", "a");
-
-	char * str = "<a href=\"https:neteacher.co.il\"\n <a href=\"google.com\">";
-	size_t strSize = strlen(str);
-	findLinks(str, strSize);
-
-	int counter = 0;
-	char * val;
-	printQueue(links, printcb);
-	return 0;
-
-	// Copy file to buffer
-	//char * buffer = copyFile("output.txt");
-
-
-	/*
-	   if(fp!=NULL){
-
-	   while()
-	   findLinks()
-
-	   exit(0);
-	   }
-	 */
-	if(fp == NULL){
-		printf("File could not be opened");
-		exit(-1);
-	}
-
-	/*
-	   Setting fp and seed
-	   if user did not provide them they will be set to default
-	 */
+	// set the seed with a user provided value or
+	// with default if non provided
 	if(argc == 1){
 		seed = "https://neteacher.co.il";
-		//fp = fopen("output.txt", "w");
-	}else if(argc==2){
-		seed = argv[1];
-		//fp = fopen("output.txt", "w");
 	}else{
 		seed = argv[1];
-		//fp = fopen(argv[2], "w");
 	}
 
+	// Initialize the curl library
 	CURL * curl = curl_easy_init();
 	if(!curl){
 		printf("curl_easy_init failed");
 		exit(-1);
 	}
 
-	int nfiles = argc-1;
-	char ** files = &argv[0]+1;
-
+	curl_easy_setopt(curl, CURLOPT_URL, seed);
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,cb);
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA,(void *) fp);
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA, res);
 
+	CURLcode result = curl_easy_perform(curl);
+	if(result!=CURLE_OK){
+		die("curl_easy_perform failed\n");
+	}
+
+	printf("%s", res->buffer);
+/*
 	for(int i=0; i<nfiles; i++){
 		char sep[32];
 		snprintf(sep, sizeof(sep), "FILE %d START", i);
@@ -183,7 +200,7 @@ int main(int argc, char * argv[]){
 
 
 	}
-
+*/
 	// Send request
 	fclose(fp);
 
@@ -192,4 +209,9 @@ int main(int argc, char * argv[]){
 	return 0;
 
 
+}
+
+void die(char * msg){
+	printf("%s", msg);
+	exit(-1);
 }
