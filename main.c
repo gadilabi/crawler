@@ -5,7 +5,7 @@
 #define _GNU_SOURCE
 
 /* my defines */
-#define MAX_LINK_LENGTH 100
+#define MAX_LINK_LENGTH 200
 
 // Standard libraries includes
 #include <stdio.h>
@@ -23,22 +23,16 @@
 // my includes
 #include "linked_list.h"
 #include "queue.h"
-
-// Data structures
-typedef struct response{
-	char * buffer;
-	int offset;
-	int size;
-} Response;
-
-// Function declarations
-void die(char * msg);
+#include "main.h"
 
 // Generic queue to hold link found
 Queue * links; 
 
-// max response length
-int MAX_RESPONSE_LENGTH = 4096;
+// CONSTANTS
+int MAX_RESPONSE_LENGTH = 400000;
+const int MAX_DEPTH = 3;
+
+
 
 Response * initResponse(){
 	Response * res = malloc(sizeof(Response));
@@ -51,7 +45,7 @@ Response * initResponse(){
 }
 
 
-char * findLinks(char * data, size_t size){
+char * findLinks(char * data, size_t size, int level){
 
 	// Copy the data to search and null terminate
 	char * search = malloc(size+1);
@@ -62,7 +56,8 @@ char * findLinks(char * data, size_t size){
 	char * pattern = "href=\"(.+?)\"";
 
 	// Match offsets will be stored in pmatch
-	regmatch_t pmatch[5];
+	int matchSize = 3;
+	regmatch_t pmatch[matchSize];
 
 	// Store compiled regex
 	regex_t preg;
@@ -79,10 +74,11 @@ char * findLinks(char * data, size_t size){
 	int offset = 0;
 	int lcounter = 0;
 	int gindex = 1;
+	Link * link = malloc(sizeof(Link));
 	
-	while(regexec(&preg, data, 5, pmatch, REG_NOTEOL)==0){
+	while(regexec(&preg, data, matchSize, pmatch, REG_NOTEOL)==0){
 
-		// Save links to links array
+		// Save links to links queue
 		int start;
 		int end;
 		int length;
@@ -99,9 +95,11 @@ char * findLinks(char * data, size_t size){
 
 		}
 
-		char * link = malloc(length+1);
-		memcpy(link, &data[start], length);
-		link[length] = '\0';
+		char * url = malloc(length+1);
+		memcpy(url, &data[start], length);
+		url[length] = '\0';
+		link->url = url;
+		link->level = level + 1;
 		enq(links, (void *) link);
 		lcounter++;
 		totalMatches++;
@@ -130,13 +128,17 @@ size_t cb(char * buffer, size_t itemSize, size_t nitems, void * res){
 
 	int offset = ((Response *) res)->offset;
 	memcpy(&((Response *) res)->buffer[offset], buffer, bytes);
+	((Response *) res)->offset += bytes;
 	return bytes;
 
 }
 
-char * copyFile(char * file){
-	// File to write output to
-	FILE * fp = fopen("output.txt", "a");
+Link * createLink(){
+	Link * link = malloc(sizeof(Link));
+	link->level = 0;
+	link->url = NULL;
+
+	return link;
 }
 
 void printcb(void * p){
@@ -144,18 +146,6 @@ void printcb(void * p){
 }
 
 int main(int argc, char * argv[]){
-
-	// Buffer to store response
-	Response * res = initResponse();
-
-	// Offset in res
-	int resOffset = 0;
-
-	// Open file to write ouput
-	FILE * fp = fopen("output.txt", "w");
-
-	// Initialize the links list
-	links = initQueue(MAX_LINK_LENGTH);
 
 	// Starting point for crawler
 	char * seed;
@@ -168,6 +158,18 @@ int main(int argc, char * argv[]){
 		seed = argv[1];
 	}
 
+	// Open file to write ouput
+	FILE * fp = fopen("output.txt", "w");
+
+	if(fp==NULL)
+		die("file could not be opened!");
+
+	// Initialize the links list
+	links = initQueue(sizeof(Link));
+
+	// Buffer to store response
+	Response * res = initResponse();
+
 	// Initialize the curl library
 	CURL * curl = curl_easy_init();
 	if(!curl){
@@ -175,33 +177,72 @@ int main(int argc, char * argv[]){
 		exit(-1);
 	}
 
-	curl_easy_setopt(curl, CURLOPT_URL, seed);
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,cb);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, res);
 
-	CURLcode result = curl_easy_perform(curl);
-	if(result!=CURLE_OK){
-		die("curl_easy_perform failed\n");
-	}
-
-	printf("%s", res->buffer);
 /*
-	for(int i=0; i<nfiles; i++){
-		char sep[32];
-		snprintf(sep, sizeof(sep), "FILE %d START", i);
-		fwrite(sep, 1, strlen(sep), (FILE *)fp);
-		// Set options
-		curl_easy_setopt(curl, CURLOPT_URL, files[i]);
-		CURLcode result = curl_easy_perform(curl);
-		if(result!=CURLE_OK){
-			printf("curl_easy_perform failed");
-			exit(-1);
-		}
-
-
+	// Loop over queue and save links to file
+	int length = links->size;
+	for(int i=0; i < length; i++){
+		Link * link = (Link *) deq(links); 
+		fwrite(link->url, sizeof(char), strlen(link->url), fp);
+		fwrite("\n", sizeof(char), 1, fp);
 	}
 */
-	// Send request
+	/* Initial request and finding links for seed */
+	// Send request for SEED
+	curl_easy_setopt(curl, CURLOPT_URL, seed);
+	CURLcode result = curl_easy_perform(curl);
+
+	// Find the links in the response and enque them for SEED
+	findLinks(res->buffer, res->offset, 0);
+
+	// deq, request, search links in response untill queue is empty
+	// MAX_DEPTH is used to limit depth of search
+	while(links->size > 0){
+
+		// Get the next link to send request to
+		Link * currentLink = deq(links);
+		
+		// Write links into file
+		fwrite(currentLink->url, sizeof(char), strlen(currentLink->url), fp);
+		fwrite("\n", sizeof(char), 1, fp);
+
+		//enum linkType type = checkLinkType(currentLink->url);
+
+		if(currentLink->level >= MAX_DEPTH)
+			continue;
+
+		// Send request
+		curl_easy_setopt(curl, CURLOPT_URL, currentLink->url);
+		CURLcode result = curl_easy_perform(curl);
+
+		if(result!=CURLE_OK){
+			continue;
+		}
+
+		// Find the links in the response and enque them
+		findLinks(res->buffer, res->offset, currentLink->level);
+
+	}
+
+	//printf("%s", res->buffer);
+	/*
+	   for(int i=0; i<nfiles; i++){
+	   char sep[32];
+	   snprintf(sep, sizeof(sep), "FILE %d START", i);
+	   fwrite(sep, 1, strlen(sep), (FILE *)fp);
+	// Set options
+	curl_easy_setopt(curl, CURLOPT_URL, files[i]);
+	CURLcode result = curl_easy_perform(curl);
+	if(result!=CURLE_OK){
+	printf("curl_easy_perform failed");
+	exit(-1);
+	}
+
+
+	}
+	 */
 	fclose(fp);
 
 	curl_easy_cleanup(curl);

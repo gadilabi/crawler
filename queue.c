@@ -32,13 +32,12 @@ void * deq(struct queue * q){
 	}
 
 	void * served = getValueAt(q->q, 0);
-	//void * servedCopy = malloc(sizeof(q->dataType));
-	//memcpy(servedCopy, served, q->dataType);
+	void * servedCopy = malloc(q->dataType);
+	memcpy(servedCopy, served, q->dataType);
 	removeLinkAt(q->q, 0, 1);
 	q->size--;
 
-	return served;
-	//return servedCopy;
+	return servedCopy;
 }
 
 void printQueue(struct queue * q, void printCallback(void * value)){
@@ -73,15 +72,20 @@ void printQueue(struct queue * q, void printCallback(void * value)){
 
 /*
 int main(){
-	struct queue * q = initQueue(sizeof(int));
-	int a[] = {1,2,3,4,5};
-	enq(q, &a[0]);
-	deq(q);
-	enq(q, &a[1]);
-	enq(q, &a[2]);
-	enq(q, &a[3]);
-	enq(q, &a[4]);
-	freeQueue(q);
+	int size = 256;
+	struct queue * q = initQueue(size);
+	char * s1 = "1) short and sweet";
+	char * s2 = "2) longer but not over the top";
+	char * s3 = "3) going to almost overflow the mf";
+	enq(q, s1);
+	enq(q, s2);
+	enq(q, s3);
+	int length = q->size;
+	for(int i=0; i < length; i++){
+		char * s = (char *) deq(q);
+		printf("%s", s);
+	}
+	//freeQueue(q);
 	//printQueue(q, printInt);
 	//deqAll(q);
 	return 0;

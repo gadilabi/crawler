@@ -23,6 +23,7 @@ struct node * createNode(struct linkedList * llp, void * value){
 
 	if(value!=NULL){
 		data = malloc(llp->dataType);
+		if(!data) exit(-1);
 		memcpy(data, value, llp->dataType);
 	}else{
 		data = NULL;
@@ -215,17 +216,20 @@ void printChar(void * c){
 
 
 }
+
 /*
 int main(){
 
-	struct linkedList * llp = createLinkedList(sizeof(int));
-	char * c = "hello world!";
-	int i[] = {1,2,3,4};
-	addLink(llp, &i[0]);
+	struct linkedList * llp = createLinkedList(256);
+	char * s1 = "msg number 1 short and sweet";
+	char * s2 = "msg number 2 a bit longer but maintainable";
+	char * s3 = "msg number 3 nothing";
+	char * s4 = "msg number 4 which is going to be longer than all others";
+	addLink(llp, s1);
 	//removeLinkAt(llp, 0, 0);
-	addLink(llp, &i[1]);
-	addLink(llp, &i[2]);
-	addLink(llp, &i[3]);
+	addLink(llp, s2);
+	addLink(llp, s3);
+	addLink(llp, s4);
 	//printLinkedList(llp, printInt);
 	freeLinkedList(llp);
 	//reverse(llp);
@@ -233,4 +237,3 @@ int main(){
 
 }
 */
-
