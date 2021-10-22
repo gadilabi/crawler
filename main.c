@@ -101,6 +101,7 @@ void findLinks(char * data, size_t size, int level, char * parentBaseURL){
 		memcpy(raw_url, &search[start], length);
 		raw_url[length] = '\0';
 
+
 		// Check type of url: relative or absolute
 		enum linkType type = checkLinkType(raw_url);
 
@@ -120,7 +121,7 @@ void findLinks(char * data, size_t size, int level, char * parentBaseURL){
 			int sizeURL = sizeBase + sizeRaw + 2;
 			url = malloc(sizeURL*sizeof(char));
 
-			if(raw_url[0]=='\\')
+			if(raw_url[0]=='/')
 				sprintf(url, "%s%s", baseURL, raw_url);
 			else
 				sprintf(url, "%s/%s", baseURL, raw_url);
@@ -189,10 +190,23 @@ int main(int argc, char * argv[]){
 	// Starting point for crawler
 	char * seed;
 
+	// Buffer to store response
+	Response * res = initResponse();
+
 	// set the seed with a user provided value or
 	// with default if non provided
 	if(argc == 1){
-		seed = "https://neteacher.co.il";
+		char * line = NULL;
+		size_t len = 0;
+
+		// read from stdin
+		while(getline(&line, &len, stdin)!=-1){
+			memcpy(res->buffer, line, len);
+			res->offset += len;
+		}
+
+		seed = "https://example.com";
+
 	}else{
 		seed = argv[1];
 	}
@@ -206,8 +220,6 @@ int main(int argc, char * argv[]){
 	// Initialize the links list
 	links = initQueue(sizeof(Link));
 
-	// Buffer to store response
-	Response * res = initResponse();
 
 	// Initialize the curl library
 	CURL * curl = curl_easy_init();
@@ -223,13 +235,19 @@ int main(int argc, char * argv[]){
 	/* Initial request and finding links for seed */
 	// Send request for SEED
 	curl_easy_setopt(curl, CURLOPT_URL, seed);
-	CURLcode result = curl_easy_perform(curl);
 
-	if(result!=CURLE_OK){
-		printf("error code %d: %s\n", result, curl_easy_strerror(result));
-		printf("Not CURLE_OK\n");
+	CURLcode result;
+
+	if(argc > 1){
+		result = curl_easy_perform(curl);
+
+		if(result!=CURLE_OK){
+			printf("error code %d: %s\n", result, curl_easy_strerror(result));
+			printf("Not CURLE_OK\n");
+		}
+
+
 	}
-
 
 	// Find the links in the response and enque them for SEED
 	findLinks(res->buffer, res->offset, 0, seed);
@@ -260,6 +278,7 @@ int main(int argc, char * argv[]){
 		CURLcode result = curl_easy_perform(curl);
 
 		if(result!=CURLE_OK){
+			printf("Not curle ok inside loop");
 			continue;
 		}
 
@@ -335,7 +354,7 @@ enum linkType checkLinkType(char * url){
 char * getBase(char * link){
 
 	// The pattern of a link
-	char * pattern = "(http.*://[^/]+)/.+";
+	char * pattern = "(http.*://[^/]+)/?.*";
 
 	// Match offsets will be stored in pmatch
 	int matchSize = 3;
@@ -353,12 +372,15 @@ char * getBase(char * link){
 
 	int ret_exec = regexec(&preg, link, 2, pmatch, REG_NOTEOL);
 
+	if(ret_exec!=0){
+		printf("failed exec in getbase\n");
+		return NULL;
+	}
+
 	int start =(int) pmatch[1].rm_so;
 	int end = (int) pmatch[1].rm_eo;
 	int length = end-start;
 
-	if(ret_exec!=0)
-		return NULL;
 
 	char * group = malloc(length + 1);
 	memcpy(group, &link[start], length);
