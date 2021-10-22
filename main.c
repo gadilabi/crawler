@@ -43,7 +43,10 @@ Response * initResponse(){
 }
 
 
-void findLinks(char * data, size_t size, int level, char * baseURL){
+void findLinks(char * data, size_t size, int level, char * parentBaseURL){
+
+	// The current url baseURL
+	char * baseURL;
 
 	// Copy the data to search and null terminate
 	char * search = malloc(size+1);
@@ -51,7 +54,7 @@ void findLinks(char * data, size_t size, int level, char * baseURL){
 	search[size] = '\0';
 
 	// The pattern of a link
-	char * pattern = "href=\"(.+?)\"";
+	char * pattern = "<a.*href=\"(.+?)\"";
 
 	// Match offsets will be stored in pmatch
 	int matchSize = 5;
@@ -106,12 +109,22 @@ void findLinks(char * data, size_t size, int level, char * baseURL){
 
 		// Turn relative urls to absolute by concetanating to base urls
 		if(type==RELATIVE){
+			baseURL = parentBaseURL;
+			if(baseURL == NULL){
+				search = &search[offset];
+				continue;
+			}
+
 			int sizeBase = strlen(baseURL);
 			int sizeRaw = strlen(raw_url);
 			int sizeURL = sizeBase + sizeRaw + 2;
 			url = malloc(sizeURL*sizeof(char));
 
-			sprintf(url, "%s/%s", baseURL, raw_url);
+			if(raw_url[0]=='\\')
+				sprintf(url, "%s%s", baseURL, raw_url);
+			else
+				sprintf(url, "%s/%s", baseURL, raw_url);
+
 			url[sizeURL-1] = '\0';
 		}else if(type==ABSOLUTE){
 			baseURL = getBase(raw_url);
@@ -205,20 +218,18 @@ int main(int argc, char * argv[]){
 
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,cb);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, res);
+	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0);
 
-	/*
-	// Loop over queue and save links to file
-	int length = links->size;
-	for(int i=0; i < length; i++){
-	Link * link = (Link *) deq(links); 
-	fwrite(link->url, sizeof(char), strlen(link->url), fp);
-	fwrite("\n", sizeof(char), 1, fp);
-	}
-	 */
 	/* Initial request and finding links for seed */
 	// Send request for SEED
 	curl_easy_setopt(curl, CURLOPT_URL, seed);
 	CURLcode result = curl_easy_perform(curl);
+
+	if(result!=CURLE_OK){
+		printf("error code %d: %s\n", result, curl_easy_strerror(result));
+		printf("Not CURLE_OK\n");
+	}
+
 
 	// Find the links in the response and enque them for SEED
 	findLinks(res->buffer, res->offset, 0, seed);
@@ -272,21 +283,33 @@ enum linkType checkLinkType(char * url){
 	// calc the length of the url
 	size_t url_length = strlen(url);
 
+	bool is_css = false;
+	bool is_png = false;
+	bool is_jpg = false;
+	bool is_js = false;
+
 	// Copy 2 last characters
-	char last_two[3];
-	memcpy(last_two, &url[url_length-2], 2);
-	last_two[2] = '\0';
+	if(url_length > 3){
+		char last_two[3];
+		memcpy(last_two, &url[url_length-2], 2);
+		last_two[2] = '\0';
+		is_js = strncmp(last_two, "js", 2)==0;
+
+	}else
+		return RELATIVE;
 
 	// Copy 3 last characters
-	char last_three[4];
-	memcpy(last_three, &url[url_length-3], 3);
-	last_three[3] = '\0';
+	if(url_length > 4){
+		char last_three[4];
+		memcpy(last_three, &url[url_length-3], 3);
+		last_three[3] = '\0';
+		is_css = strncmp(last_three, "css", 3)==0;
+		is_png = strncmp(last_three, "png", 3)==0;
+		is_jpg = strncmp(last_three, "jpg", 3)==0;
+	}else
+		return RELATIVE;
 
 	// Check if resource by extension
-	bool is_css = strncmp(last_three, "css", 3)==0;
-	bool is_png = strncmp(last_three, "png", 3)==0;
-	bool is_jpg = strncmp(last_three, "jpg", 3)==0;
-	bool is_js = strncmp(last_two, "js", 2)==0;
 	bool is_resource = is_css || is_png || is_jpg || is_js;
 
 	if(is_resource)
@@ -312,7 +335,7 @@ enum linkType checkLinkType(char * url){
 char * getBase(char * link){
 
 	// The pattern of a link
-	char * pattern = "href=\"(http[^/]+)/.+\"";
+	char * pattern = "(http.*://[^/]+)/.+";
 
 	// Match offsets will be stored in pmatch
 	int matchSize = 3;
@@ -339,10 +362,10 @@ char * getBase(char * link){
 
 	char * group = malloc(length + 1);
 	memcpy(group, &link[start], length);
+	group[length] = '\0';
 
-	printf("%s\n", group);
 
-	return 0;
+	return group;
 
 }
 
@@ -350,3 +373,5 @@ void die(char * msg){
 	printf("%s", msg);
 	exit(-1);
 }
+
+
