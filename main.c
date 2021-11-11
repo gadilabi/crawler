@@ -25,9 +25,13 @@
 #include "linked_list.h"
 #include "queue.h"
 #include "main.h"
+#include "/home/vagrant/my_libs/hash_table/hash_table.h"
 
 // Generic queue to hold link found
 Queue * links; 
+
+// Creating a hash table to hold visited links
+HashTable * ht;
 
 // CONSTANTS
 int MAX_RESPONSE_LENGTH = 4000000;
@@ -139,7 +143,17 @@ void findLinks(char * data, size_t size, int level, char * parentBaseURL){
 		link->url = url;
 		link->base = baseURL;
 		link->level = level + 1;
-		enq(links, (void *) link);
+
+		// Check if the link was already visited
+		// if it is new enque it
+		size_t len = strlen(url) + 1;
+		char * key = malloc(len);
+		char * value = malloc(len);
+		memcpy(key, url, len);
+		memcpy(value, url, len);
+		if(ht_insert(ht, key, value)==HT_INSERT_NEW){
+			enq(links, (void *) link);
+		}
 
 		// incs
 		lcounter++;
@@ -186,6 +200,9 @@ void printcb(void * p){
 }
 
 int main(int argc, char * argv[]){
+
+	// Creating a hash table to hold visited links
+	ht = ht_create(200);
 
 	// Starting point for crawler
 	char * seed;
@@ -250,7 +267,7 @@ int main(int argc, char * argv[]){
 	}
 
 	// Find the links in the response and enque them for SEED
-	findLinks(res->buffer, res->offset, 0, seed);
+	findLinks(res->buffer, res->offset, 0, getBase(seed));
 
 	// deq, request, search links in response untill queue is empty
 	// MAX_DEPTH is used to limit depth of search

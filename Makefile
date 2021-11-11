@@ -1,5 +1,5 @@
-main.exe: main.o queue.o linked_list.o  
-	gcc -Wall -g --std=c99 main.o queue.o linked_list.o -lcurl -lpcre2-posix -o main.exe -Wl,-rpath,/usr/local/lib
+main.exe: main.o queue.o linked_list.o
+	gcc -Wall -g --std=c99 main.o queue.o linked_list.o -lht -lcurl -lpcre2-posix -o main.exe -L /home/vagrant/my_libs/hash_table -Wl,-rpath /usr/local/lib -Wl,-rpath /home/vagrant/my_libs/hash_table
 
 main.o: main.c
 	gcc -Wall -g -c --std=c99 main.c -o main.o
